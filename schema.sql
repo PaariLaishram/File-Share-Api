@@ -1,0 +1,21 @@
+
+CREATE TABLE share_links(
+id INT PRIMARY KEY AUTO_INCREMENT,
+link VARCHAR(20) UNIQUE NOT NULL
+)AUTO_INCREMENT = 1001;
+
+
+CREATE table users (
+id INT PRIMARY KEY AUTO_INCREMENT,
+email VARCHAR(200) UNIQUE NOT NULL,
+password VARCHAR(200)
+)AUTO_INCREMENT=1001;
+
+
+
+create table refresh_tokens(
+user INT,
+token VARCHAR(500),
+jti VARCHAR(200),
+expires_at BIGINT,
+PRIMARY KEY(user, token, jti));
