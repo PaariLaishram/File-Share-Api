@@ -37,17 +37,17 @@ func (shareLink ShareLink) Add() (result []any, count int, error string) {
 	}
 	var res []any = []any{last_inserted_token}
 	return res, len(res), ""
-
 }
+
+var randsrc = rand.New(rand.NewSource(time.Now().Unix()))
 
 func GenerateLink() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	const length = 8
-	rand := rand.New(rand.NewSource(time.Now().Unix()))
 
 	result := make([]byte, length)
 	for i := 0; i < length; i++ {
-		result[i] = charset[rand.Intn(len(charset))]
+		result[i] = charset[randsrc.Intn(len(charset))]
 	}
 	return string(result)
 }

@@ -18,7 +18,6 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// var clients = make(map[string]*websocket.Conn)
 var clients = make(map[string]*models.Client)
 var broadcast = make(chan models.UploadSignal)
 
@@ -27,8 +26,16 @@ func HandleWSConnections(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer ws_conn.Close()
 
+	var client *models.Client
+
+	defer func() {
+		if client != nil {
+			delete(clients, models.SanitizeString(client.ConnKey))
+			ws_conn.Close()
+			log.Info("Client disconnected: ", models.SanitizeData(client.ConnKey))
+		}
+	}()
 	for {
 		messageType, message, err := ws_conn.ReadMessage()
 		if err != nil {
@@ -49,12 +56,14 @@ func HandleWSConnections(w http.ResponseWriter, r *http.Request) {
 			share_link := models.SanitizeData(signal.ShareLink)
 			user_type := models.SanitizeData(signal.UserType)
 			conn_key := fmt.Sprintf("%s:%s", share_link, user_type)
-			clients[conn_key] = &models.Client{
+			client = &models.Client{
 				Conn:       ws_conn,
 				ShareLink:  signal.ShareLink,
 				UserType:   signal.UserType,
 				LastSignal: signal,
+				ConnKey:    &conn_key,
 			}
+			clients[conn_key] = client
 			broadcast <- signal
 		}
 	}
@@ -79,7 +88,6 @@ func handleBinaryChunk(data []byte) {
 		return
 	}
 	chunkData := data[4+metadataLen:]
-	// log.Info(models.SanitizeData(signal.UserType), models.SanitizeData(signal.ShareLink), models.SanitizeData(signal.ActionType))
 	receiver_key := fmt.Sprintf("%s:%s", models.SanitizeData(signal.ShareLink), "receiver")
 	reciver := clients[receiver_key]
 	processFileChunk(&signal, chunkData, reciver)

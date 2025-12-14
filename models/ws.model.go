@@ -25,6 +25,7 @@ type Client struct {
 	UserType   *string
 	LastSignal UploadSignal
 	WriteMutex sync.Mutex
+	ConnKey    *string
 }
 
 func (data *UploadSignal) DeepCopy() *UploadSignal {
