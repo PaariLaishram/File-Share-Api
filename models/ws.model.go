@@ -9,14 +9,39 @@ import (
 )
 
 type UploadSignal struct {
-	UserType         *string `json:"userType,omitempty"`
-	ShareLink        *string `json:"shareLink,omitempty"`
-	ActionType       *string `json:"actionType,omitempty"`
-	IsValidShareLink *bool   `json:"isValidShareLink,omitempty"`
-	ConfirmUpload    *bool   `json:"confirmUpload,omitempty"`
-	ChunkIndex       *int    `json:"chunkIndex,omitempty"`
-	TotalChunks      *int    `json:"totalChunks,omitempty"`
-	FileName         *string `json:"fileName,omitempty"`
+	UserType         *string                `json:"userType,omitempty"`
+	ShareLink        *string                `json:"shareLink,omitempty"`
+	ActionType       *string                `json:"actionType,omitempty"`
+	IsValidShareLink *bool                  `json:"isValidShareLink,omitempty"`
+	ConfirmUpload    *bool                  `json:"confirmUpload,omitempty"`
+	ChunkIndex       *int                   `json:"chunkIndex,omitempty"`
+	TotalChunks      *int                   `json:"totalChunks,omitempty"`
+	FileName         *string                `json:"fileName,omitempty"`
+	Offer            *RTCSessionDescription `json:"offer,omitempty"`
+	Answer           *RTCSessionDescription `json:"answer,omitempty"`
+	Candidate        *RTCIceCandidate       `json:"candidate,omitempty"`
+}
+
+type RTCIceCandidate struct {
+	Address          *string `json:"address,omitepmpty"`
+	Candidate        *string `json:"candidate,omitempty"`
+	Component        *string `json:"component,omitempty"`
+	Foundation       *string `json:"foundation,omitempty"`
+	Port             *int    `json:"port,omitempty"`
+	Priority         *int    `json:"priority,omitempty"`
+	Protocol         *string `json:"protocol,omitempty"`
+	RelatedAddress   *string `json:"relatedAddress,omitempty"`
+	RelatedPort      *int    `json:"relatedPort,omitempty"`
+	SdpMid           *string `json:"sdpMid,omitempty"`
+	SdpMLineIndex    *int    `json:"int,omitempty"`
+	TcpType          *string `json:"tcpType,omitempty"`
+	Type             *string `json:"type,omitempty"`
+	UsernameFragment *string `json:"usernameFragment,omitempty"`
+}
+
+type RTCSessionDescription struct {
+	Type *string `json:"type,omitempty"`
+	SDP  *string `json:"sdp,omitempty"`
 }
 
 type Client struct {

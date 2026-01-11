@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"FileShare/models"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,7 +18,7 @@ var upgrader = websocket.Upgrader{
 }
 
 var clients = make(map[string]*models.Client)
-var broadcast = make(chan models.UploadSignal)
+var messages = make(chan models.UploadSignal)
 
 func HandleWSConnections(w http.ResponseWriter, r *http.Request) {
 	ws_conn, err := upgrader.Upgrade(w, r, nil)
@@ -37,22 +36,18 @@ func HandleWSConnections(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	for {
-		messageType, message, err := ws_conn.ReadMessage()
+		_, message, err := ws_conn.ReadMessage()
 		if err != nil {
 			log.Error("Read Error:", err)
 			return
 		}
-		switch messageType {
-		case websocket.BinaryMessage:
-			handleBinaryChunk(message)
-		case websocket.TextMessage:
-			var signal models.UploadSignal
-			err := json.Unmarshal(message, &signal)
-			if err != nil {
-				log.Error("Error decoding JSON: ", err.Error())
-				continue
-			}
-
+		var signal models.UploadSignal
+		err = json.Unmarshal(message, &signal)
+		if err != nil {
+			log.Error("error unmarshalling: ", err.Error())
+			return
+		}
+		if client == nil {
 			share_link := models.SanitizeData(signal.ShareLink)
 			user_type := models.SanitizeData(signal.UserType)
 			conn_key := fmt.Sprintf("%s:%s", share_link, user_type)
@@ -64,112 +59,78 @@ func HandleWSConnections(w http.ResponseWriter, r *http.Request) {
 				ConnKey:    &conn_key,
 			}
 			clients[conn_key] = client
-			broadcast <- signal
 		}
+		messages <- signal
 	}
-}
-
-func handleBinaryChunk(data []byte) {
-	if len(data) < 4 {
-		log.Error("Binary message too short - missing header")
-		return
-	}
-	metadataLen := binary.BigEndian.Uint32(data[0:4])
-
-	if len(data) < 4+int(metadataLen) {
-		log.Error("Binary message malformed: metadata length exceeds message size")
-		return
-	}
-
-	metadataJSON := data[4 : 4+metadataLen]
-	var signal models.UploadSignal
-	if err := json.Unmarshal(metadataJSON, &signal); err != nil {
-		log.Error("Failed to parse metadata JSON:", err)
-		return
-	}
-	chunkData := data[4+metadataLen:]
-	receiver_key := fmt.Sprintf("%s:%s", models.SanitizeData(signal.ShareLink), "receiver")
-	reciver := clients[receiver_key]
-	processFileChunk(&signal, chunkData, reciver)
-}
-func processFileChunk(signal *models.UploadSignal, chunkData []byte, receiver *models.Client) {
-	metadataJSON, _ := json.Marshal(signal)
-	header := make([]byte, 4)
-	binary.BigEndian.PutUint32(header, uint32(len(metadataJSON)))
-
-	message := append(header, metadataJSON...) // header + metadata
-	message = append(message, chunkData...)
-	receiver.Conn.WriteMessage(websocket.BinaryMessage, message)
 }
 
 func HandleWSMessages() {
 	for {
-		incoming_signal := <-broadcast
-		var err error
-		user_type := models.SanitizeData(incoming_signal.UserType)
-		share_link := models.SanitizeData(incoming_signal.ShareLink)
-		action_type := models.SanitizeData(incoming_signal.ActionType)
+		signal := <-messages
+		user_type := models.SanitizeData(signal.UserType)
+		action_type := models.SanitizeData(signal.ActionType)
+		share_link := models.SanitizeData(signal.ShareLink)
 
 		is_valid_share_link := isValidShareLink(action_type, user_type, share_link)
-
-		outgoing_signal := incoming_signal.DeepCopy()
-		outgoing_signal.IsValidShareLink = &is_valid_share_link
-
-		var outgoing_user_type string
+		signal.IsValidShareLink = &is_valid_share_link
+		// outgoing_signal := incoming_signal.DeepCopy()
+		// outgoing_signal.IsValidShareLink = &is_valid_share_link
 
 		if !is_valid_share_link {
-			log.Info("Share Link is not valid")
-			writeWSJSON("sender", share_link, outgoing_signal)
-		} else {
-			switch action_type {
-			case "initConn":
-				outgoing_user_type = outgoing_signal.InitConn()
-			case "startUpload":
-				outgoing_user_type = outgoing_signal.StartUpload()
-			case "confirmUpload":
-				outgoing_user_type = outgoing_signal.UploadConfirmation()
-			case "ackChunk":
-				outgoing_user_type = outgoing_signal.AckChunk()
-			case "uploadComplete":
-				outgoing_user_type = outgoing_signal.UploadComplete()
+			log.Error("Invalid share link")
+			writeWSJSON("sender", share_link, &signal)
+		}
+		switch action_type {
+		case "initConn":
+			if user_type == "sender" {
+				writeWSJSON("sender", share_link, &signal)
 			}
-			err = writeWSJSON(outgoing_user_type, models.SanitizeString(outgoing_signal.ShareLink), outgoing_signal)
-			if err != nil {
-				log.Error("Error writing WS Message")
+		case "createOffer":
+			if user_type == "sender" {
+				writeWSJSON("receiver", share_link, &signal)
 			}
+		case "answerOffer":
+			if user_type == "receiver" {
+				writeWSJSON("sender", share_link, &signal)
+			}
+		case "iceCandidate":
+			msg_for := "sender"
+			if user_type == "sender" {
+				msg_for = "receiver"
+			}
+			writeWSJSON(msg_for, share_link, &signal)
 		}
 	}
 }
 
 func isValidShareLink(actionType, userType, shareLink string) bool {
 	conn_key := fmt.Sprintf("%s:%s", shareLink, userType)
-	if userType == "sender" && (actionType == "initConn" || actionType == "startUpload") {
+	if userType == "sender" && actionType == "initConn" {
 		conn_key = fmt.Sprintf("%s:%s", shareLink, "receiver")
 	}
-	if _, exists := clients[conn_key]; exists {
+	if _, exist := clients[conn_key]; exist {
 		return true
 	}
 	return false
 }
 
-func writeWSJSON(user_type, share_link string, data *models.UploadSignal) error {
+func writeWSJSON(user_type, share_link string, signal *models.UploadSignal) error {
 	if user_type == "" {
-
-		log.Error("Invalid user type for action type: ", models.SanitizeData(data.ActionType))
-		return errors.New("writeWSMessage error: Invalid user type")
+		log.Error("invalid user type for action type: ", models.SanitizeData(signal.ActionType))
+		return errors.New("error: invalid user type")
 	}
 	if share_link == "" {
-		log.Error("Invalid share link", models.SanitizeData(data.ActionType))
-		return errors.New("writeWSMessage error: Invalid share link")
+		log.Error("invalid share link ", models.SanitizeData(signal.ActionType))
+		return errors.New("error: invalid share link")
 	}
 	conn_key := fmt.Sprintf("%s:%s", share_link, user_type)
 	client := clients[conn_key]
-
 	client.WriteMutex.Lock()
 	defer client.WriteMutex.Unlock()
-	err := client.Conn.WriteJSON(data)
+
+	err := client.Conn.WriteJSON(signal)
 	if err != nil {
-		log.Error("Error writing json: ", err.Error())
+		log.Error("error in writing json: ", err.Error())
 		client.Conn.Close()
 		return err
 	}
