@@ -6,7 +6,6 @@ import (
 	"FileShare/utils"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/log"
@@ -53,13 +52,7 @@ func main() {
 	}()
 
 	app := fiber.New()
-	app.Use(cors.New(cors.Config{
-		AllowOriginsFunc: func(origin string) bool {
-			return strings.HasPrefix(origin, "http://localhost:")
-		},
-		AllowCredentials: true,
-		AllowHeaders:     "Content-Type",
-	}))
+	app.Use(cors.New())
 
 	app.Get("/", func(ctx *fiber.Ctx) error {
 		return ctx.SendString("Welcome to file share api")
