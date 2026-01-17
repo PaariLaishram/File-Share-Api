@@ -26,7 +26,6 @@ type ShareToken struct {
 func authenticate(ctx *fiber.Ctx) error {
 	//validate access token
 	authHeader := ctx.Get("Authorization")
-	log.Info(authHeader)
 	if authHeader == "" {
 		return utils.GetMessageResponse(ctx, false, "", "Unathorised", 401)
 	}

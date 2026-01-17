@@ -17,7 +17,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-var clients = make(map[string]*models.Client)
+var clients_map = make(map[string]*models.Client)
 var messages = make(chan models.UploadSignal)
 
 func HandleWSConnections(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +30,7 @@ func HandleWSConnections(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		if client != nil {
-			delete(clients, models.SanitizeString(client.ConnKey))
+			delete(clients_map, models.SanitizeString(client.ConnKey))
 			ws_conn.Close()
 			log.Info("Client disconnected: ", models.SanitizeData(client.ConnKey))
 		}
@@ -58,7 +58,7 @@ func HandleWSConnections(w http.ResponseWriter, r *http.Request) {
 				LastSignal: signal,
 				ConnKey:    &conn_key,
 			}
-			clients[conn_key] = client
+			clients_map[conn_key] = client
 		}
 		messages <- signal
 	}
@@ -108,7 +108,7 @@ func isValidShareLink(actionType, userType, shareLink string) bool {
 	if userType == "sender" && actionType == "initConn" {
 		conn_key = fmt.Sprintf("%s:%s", shareLink, "receiver")
 	}
-	if _, exist := clients[conn_key]; exist {
+	if _, exist := clients_map[conn_key]; exist {
 		return true
 	}
 	return false
@@ -124,7 +124,7 @@ func writeWSJSON(user_type, share_link string, signal *models.UploadSignal) erro
 		return errors.New("error: invalid share link")
 	}
 	conn_key := fmt.Sprintf("%s:%s", share_link, user_type)
-	client := clients[conn_key]
+	client := clients_map[conn_key]
 	client.WriteMutex.Lock()
 	defer client.WriteMutex.Unlock()
 
